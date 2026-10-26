@@ -1268,7 +1268,7 @@ function scrFood(){
   </section>
   <section class="card">
     <h3>เพิ่มอาหาร</h3>
-    <div class="seg">${[["search","ค้นหาเมนู"],...(Store.mode==="api"?[]:[["photo","ถ่ายรูปอาหาร"]]),["custom","กรอกเอง"]].map(([v,l])=>`<button data-act="addTab" data-v="${v}" aria-pressed="${tab===v}">${l}</button>`).join("")}</div>
+    <div class="seg">${[["search","ค้นหาเมนู"],["photo","ถ่ายรูปอาหาร"],["custom","กรอกเอง"]].map(([v,l])=>`<button data-act="addTab" data-v="${v}" aria-pressed="${tab===v}">${l}</button>`).join("")}</div>
     ${grp("มื้อ",`<select id="mealSel">${meals.map(m=>`<option ${m===mealNow()?"selected":""}>${m}</option>`).join("")}</select>`)}
     ${tab==="search"?`<div class="row"><input type="search" id="foodQ" placeholder="พิมพ์ชื่ออาหาร เช่น ส้มตำ ข้าวเหนียว ลาบ" style="flex:1" aria-label="ค้นหาเมนู"></div><div id="foodRes" class="list"></div>`:""}
     ${tab==="photo"?`<p class="small muted">ถ่ายหรือเลือกรูปอาหาร 1 จาน/ถาด ระบบ AI จะประเมินชนิดอาหาร พลังงาน คาร์บ และโซเดียมโดยประมาณ ตรวจและแก้ไขได้ก่อนบันทึก</p>
@@ -1326,6 +1326,14 @@ async function analyzePhoto(){
   const ph=S.photo; if(!ph) return;
   ph.state="busy"; $("#photoBox").innerHTML=photoBoxHTML();
   try{
+    if(Store.mode==="api"){
+      const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(",")[1]); r.onerror=rej; r.readAsDataURL(ph.blob); });
+      const r = await Api.call({op:"analyzeFood", type:ph.blob.type||"image/jpeg", b64});
+      if(!r.ok) throw new Error({ai_not_configured:"ยังไม่ได้ตั้งค่าระบบ AI วิเคราะห์รูปอาหาร แจ้งเจ้าหน้าที่ รพ.สต. ระหว่างนี้ใช้การค้นหาเมนูหรือกรอกเองได้", ai_limit:"วันนี้ใช้วิเคราะห์รูปครบ 30 ครั้งแล้ว ใช้การค้นหาเมนูหรือกรอกเองแทนได้", too_large:"รูปใหญ่เกินไป ลองถ่ายใหม่", auth:"หมดเวลาการใช้งาน กรุณาเข้าสู่ระบบอีกครั้ง"}[r.error] || "วิเคราะห์รูปไม่สำเร็จ ลองถ่ายใหม่ให้เห็นอาหารชัดเจน");
+      ph.items = (r.items||[]).map(x=>({name:String(x.name||"อาหาร"), portion:String(x.portion||""), kcal:Math.max(0,+x.kcal||0), carb:Math.max(0,+x.carb_g||0), na:Math.max(0,+x.sodium_mg||0)}));
+      ph.note = r.note ? String(r.note) : ""; ph.state="done";
+      const bx=$("#photoBox"); if(bx) bx.innerHTML=photoBoxHTML(); return;
+    }
     const sample = window.claude?.use ? await window.claude.use("sample") : null;
     const lim = sample ? await sample.limits().catch(()=>null) : null;
     if(!sample || !lim?.images) throw new Error("ระบบวิเคราะห์รูปภาพยังไม่พร้อมในหน้านี้ ใช้การค้นหาเมนูหรือกรอกเองแทนได้");
